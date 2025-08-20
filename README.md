@@ -1,4 +1,6 @@
-# Process Snapshot
+# Linux Process Snapshot
+
+Snapshot and restore a Linux process.
 
 Reading material:
 
