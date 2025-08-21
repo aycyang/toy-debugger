@@ -41,3 +41,4 @@ CFLAGS="-std=c99 \
 
 gcc $CFLAGS main.c
 gcc $CFLAGS register.c -o register
+gcc $CFLAGS stack.c -o stack
