@@ -1,6 +1,4 @@
-#!/bin/sh
-
-CFLAGS="-std=c99 \
+CFLAGS=-std=c99 \
 	-Wall -Wextra -Wpedantic \
 	-fdiagnostics-color=always \
 	-fstack-clash-protection \
@@ -37,8 +35,16 @@ CFLAGS="-std=c99 \
 	-Wstrict-prototypes \
 	-Wstringop-overflow=2 \
 	-fsanitize=undefined,address,pointer-compare,pointer-subtract \
-	-g3 -march=native"
+	-g -march=native
 
-gcc $CFLAGS main.c
-gcc $CFLAGS register.c -o register
-gcc $CFLAGS stack.c -o stack
+tracer: tracer.c payload.h
+	gcc $(CFLAGS) tracer.c -o tracer
+payload.o: payload.s
+	as payload.s -o payload.o
+payload.bin: payload.o
+	objcopy -O binary payload.o payload.bin
+payload.h: payload.bin
+	xxd -i payload.bin > payload.h
+clean:
+	rm -rf tracer payload.o payload.bin payload.h
+.PHONY: clean
