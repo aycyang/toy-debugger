@@ -37,7 +37,7 @@ CFLAGS=-std=c99 \
 	-fsanitize=undefined,address,pointer-compare,pointer-subtract \
 	-g -march=native
 
-tracer: tracer.c payload.h
+tracer: tracer.c payload.h register
 	gcc $(CFLAGS) tracer.c -o tracer
 payload.o: payload.s
 	as payload.s -o payload.o
@@ -45,6 +45,8 @@ payload.bin: payload.o
 	objcopy -O binary payload.o payload.bin
 payload.h: payload.bin
 	xxd -i payload.bin > payload.h
+register: register.c
+	gcc $(CFLAGS) register.c -o register
 clean:
-	rm -rf tracer payload.o payload.bin payload.h
+	rm -rf tracer payload.o payload.bin payload.h register
 .PHONY: clean
