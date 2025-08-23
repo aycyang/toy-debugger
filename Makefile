@@ -34,7 +34,7 @@ CFLAGS=-std=c99 \
 	-Winit-self \
 	-Wstrict-prototypes \
 	-Wstringop-overflow=2 \
-	-fsanitize=undefined,address,pointer-compare,pointer-subtract \
+	-fsanitize=undefined,address \
 	-g -march=native
 
 tracer: tracer.c payload.h register
