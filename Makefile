@@ -1,5 +1,5 @@
 CFLAGS=-std=c99 \
-	-Wall -Wextra -Wpedantic \
+	-Wall -Wextra -Werror -Wpedantic \
 	-fdiagnostics-color=always \
 	-fstack-clash-protection \
 	-fstack-protector-all \
@@ -34,11 +34,12 @@ CFLAGS=-std=c99 \
 	-Winit-self \
 	-Wstrict-prototypes \
 	-Wstringop-overflow=2 \
-	-fsanitize=undefined,address \
 	-g -march=native
 
 tracer: tracer.c payload.h register
 	gcc $(CFLAGS) tracer.c -o tracer
+strsig: strsig.c
+	gcc $(CFLAGS) strsig.c -o strsig
 payload.o: payload.s
 	as payload.s -o payload.o
 payload.bin: payload.o

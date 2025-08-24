@@ -1,4 +1,7 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <assert.h>
+#include <string.h>
 #include <errno.h>
 #include <signal.h>
 #include <spawn.h>
@@ -33,20 +36,32 @@ void read_string_from_process_memory(pid_t child_pid, long long int addr, long* 
   } while (!has_zero_byte(word));
 }
 
+void debug_wait_status(int wait_status) {
+  if (WIFEXITED(wait_status)) {
+    printf("child process exited\n");
+  } else if (WIFSTOPPED(wait_status)) {
+    int signum = WSTOPSIG(wait_status);
+    const char* str = strsignal(signum);
+    printf("child process stopped because: %s\n", str);
+  } else {
+    printf("child process status unknown\n");
+  }
+}
+
 void read_proc_pid_maps(pid_t pid) {
   long long unsigned int first_start = 0, first_end = 0;
   {
     char path[32];
     snprintf(path, 32, "/proc/%d/maps", pid);
-    printf("%s\n", path);
+    //printf("%s\n", path);
     FILE *file = fopen(path, "r");
 
     char line[256];
     while (fgets(line, 256, file)) {
       long long unsigned int start, end;
       sscanf(line, "%llx-%llx", &start, &end);
-      printf("%s", line);
-      printf("%llx, %llx\n", start, end);
+      //printf("%s", line);
+      //printf("%llx, %llx\n", start, end);
       if (first_start == 0) first_start = start;
       if (first_end == 0) first_end = end;
     }
@@ -56,7 +71,7 @@ void read_proc_pid_maps(pid_t pid) {
   {
     char path[32];
     snprintf(path ,32, "/proc/%d/mem", pid);
-    printf("%s\n", path);
+    //printf("%s\n", path);
     FILE *file = fopen(path, "r");
     if (!file) {
       printf("errno=%d\n", errno);
@@ -65,7 +80,7 @@ void read_proc_pid_maps(pid_t pid) {
     assert(fseek(file, first_start, SEEK_SET) == 0);
     char tst[5] = "\0\0\0\0\0";
     fread(tst, sizeof(char), 4, file);
-    printf("%s\n", tst);
+    //printf("%s\n", tst);
   }
 }
 
@@ -87,7 +102,7 @@ int main(int argc, char** argv) {
     // program begins execution."
     // Source:
     // https://eli.thegreenplace.net/2011/01/23/how-debuggers-work-part-1
-    // ...but this isn't explicitly stated in the ptrace man page.
+    // ... but this isn't explicitly stated in the ptrace man page.
     ptrace(PTRACE_TRACEME, 0, NULL, NULL);
 
     // Turn off ASLR for the child process.
@@ -98,39 +113,22 @@ int main(int argc, char** argv) {
   // The parent process follows this codepath.
   int wstatus;
   assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  printf("wstatus=%d\n", wstatus);
-  assert(WIFSTOPPED(wstatus));
+  debug_wait_status(wstatus);
   // We are now attached to the child process.
-  read_proc_pid_maps(child_pid);
-  struct user_regs_struct regs = {0};
-  assert(ptrace(PTRACE_GETREGS, child_pid, NULL, &regs) != -1);
-  printf("%%r15=%llx\n", regs.r15);
-  printf("%%rip=%llx\n", regs.rip);
-  printf("setting breakpoint at hardcoded address\n");
-  assert(ptrace(PTRACE_POKEDATA, child_pid, /*addr=*/0x55555555516b, /*data=*/0xcc) != -1);
-  printf("continuing execution\n");
-  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  assert(WIFSTOPPED(wstatus));
-  printf("stopped execution\n");
-  printf("wstatus=%d\n", wstatus);
-  assert(ptrace(PTRACE_GETREGS, child_pid, NULL, &regs) != -1);
-  printf("%%r15=%llx\n", regs.r15);
-  printf("%%rip=%llx\n", regs.rip);
-  printf("stepping over breakpoint\n");
-  printf("continuing execution\n");
-  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  printf("wstatus=%d\n", wstatus);
-  printf("wifexited=%d\n", WIFEXITED(wstatus));
-  printf("child exited\n");
-  return 0;
 
-  //long buf[16];
-  //read_string_from_process_memory(child_pid, regs.rax, buf);
-  // Print the string we got from the child process's memory.
-  //printf("%s\n", (char*)buf);
-  kill(child_pid, SIGTERM);
-  printf("sent SIGTERM to tracee\n");
+  // WIP
+  read_proc_pid_maps(child_pid);
+
+  // Set a breakpoint.
+  assert(ptrace(PTRACE_POKEDATA, child_pid, /*addr=*/0x55555555516b, /*data=*/0x90909090909090cc) != -1);
+  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
+  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
+  debug_wait_status(wstatus);
+
+  // Continue from breakpoint.
+  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
+  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
+  debug_wait_status(wstatus);
+
   return 0;
 }
