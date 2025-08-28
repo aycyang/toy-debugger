@@ -1,12 +1,13 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <assert.h>
-#include <string.h>
 #include <errno.h>
 #include <signal.h>
 #include <spawn.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/personality.h>
 #include <sys/ptrace.h>
 #include <sys/types.h>
@@ -15,6 +16,29 @@
 #include <unistd.h>
 
 #include "payload.h"
+
+typedef struct {
+  long long int addr;
+  char byte;
+  bool enabled;
+} breakpoint_t;
+
+#define MAX_BREAKPOINTS 32
+breakpoint_t breakpoints[MAX_BREAKPOINTS] = {0};
+
+void enable_breakpoint(pid_t pid, long long int addr) {
+  breakpoint_t* bp;
+  for (int i = 0; i < MAX_BREAKPOINTS; i++) {
+    bp = &breakpoints[i];
+    if (!bp->enabled) break;
+  }
+  assert(!bp->enabled);
+  bp->addr = addr;
+  long word = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
+  bp->byte = word;
+  word = (word & ~0xff) | 0xcc;
+  assert(ptrace(PTRACE_POKEDATA, pid, addr, word) != -1);
+}
 
 int has_zero_byte(long l) {
   return
@@ -120,7 +144,8 @@ int main(int argc, char** argv) {
   read_proc_pid_maps(child_pid);
 
   // Set a breakpoint.
-  assert(ptrace(PTRACE_POKEDATA, child_pid, /*addr=*/0x55555555516b, /*data=*/0x90909090909090cc) != -1);
+  enable_breakpoint(child_pid, 0x55555555516b);
+  //assert(ptrace(PTRACE_POKEDATA, child_pid, /*addr=*/0x55555555516b, /*data=*/0x90909090909090cc) != -1);
   assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
   assert(waitpid(child_pid, &wstatus, 0) == child_pid);
   debug_wait_status(wstatus);
