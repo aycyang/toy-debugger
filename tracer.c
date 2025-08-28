@@ -15,29 +15,26 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
+
 #include "payload.h"
 
 typedef struct {
   long long int addr;
   char byte;
-  bool enabled;
 } breakpoint_t;
 
-#define MAX_BREAKPOINTS 32
-breakpoint_t breakpoints[MAX_BREAKPOINTS] = {0};
+breakpoint_t* breakpoints = NULL;
 
 void enable_breakpoint(pid_t pid, long long int addr) {
-  breakpoint_t* bp;
-  for (int i = 0; i < MAX_BREAKPOINTS; i++) {
-    bp = &breakpoints[i];
-    if (!bp->enabled) break;
-  }
-  assert(!bp->enabled);
-  bp->addr = addr;
+  breakpoint_t bp = {0};
+  bp.addr = addr;
   long word = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
-  bp->byte = word;
+  bp.byte = word;
   word = (word & ~0xff) | 0xcc;
   assert(ptrace(PTRACE_POKEDATA, pid, addr, word) != -1);
+  arrput(breakpoints, bp);
 }
 
 int has_zero_byte(long l) {
