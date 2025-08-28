@@ -28,13 +28,37 @@ typedef struct {
 breakpoint_t* breakpoints = NULL;
 
 void enable_breakpoint(pid_t pid, long long int addr) {
-  breakpoint_t bp = {0};
+  breakpoint_t bp;
   bp.addr = addr;
   long word = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
+  // Save the least-signficant byte so the instruction can be restored to its
+  // original state later.
   bp.byte = word;
+  // Overwrite the least-significant byte with 0xcc, which is the x86 int3
+  // instruction.
   word = (word & ~0xff) | 0xcc;
   assert(ptrace(PTRACE_POKEDATA, pid, addr, word) != -1);
   arrput(breakpoints, bp);
+}
+
+void disable_breakpoint(pid_t pid, long long int addr) {
+  int i = -1;
+  for (int j = 0; j < arrlen(breakpoints); j++) {
+    if (breakpoints[i].addr == addr) {
+      i = j;
+      break;
+    }
+  }
+  if (i == -1) {
+    printf("breakpoint not found at address 0x%llx\n", addr);
+    return;
+  }
+  // Restore the instruction to its original state.
+  breakpoint_t *bp = &breakpoints[i];
+  long word = ptrace(PTRACE_PEEKDATA, pid, bp->addr, NULL);
+  word = (word & ~0xff) | (0xff & bp->byte);
+  assert(ptrace(PTRACE_POKEDATA, pid, bp->addr, word) != -1);
+  arrdel(breakpoints, i);
 }
 
 int has_zero_byte(long l) {
@@ -67,6 +91,33 @@ void debug_wait_status(int wait_status) {
   } else {
     printf("child process status unknown\n");
   }
+}
+
+void update_rip(pid_t pid, int incr) {
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, pid, /*addr=*/NULL, /*data=*/&regs) != -1);
+  regs.rip += incr;
+  assert(ptrace(PTRACE_SETREGS, pid, /*addr=*/NULL, /*data=*/&regs) != -1);
+}
+
+void debug_r15(pid_t pid) {
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, pid, /*addr=*/NULL, /*data=*/&regs) != -1);
+  printf("%%r15=0x%llx\n", regs.r15);
+}
+
+void debug_rip(pid_t pid) {
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, pid, /*addr=*/NULL, /*data=*/&regs) != -1);
+  printf("%%rip=0x%llx\n", regs.rip);
+}
+
+void debug_bps(void) {
+  printf("=== BREAKPOINTS ===\n");
+  for (int i = 0; i < arrlen(breakpoints); i++) {
+    printf("0x%llx\n", breakpoints[i].addr);
+  }
+  printf("===================\n");
 }
 
 void read_proc_pid_maps(pid_t pid) {
@@ -140,14 +191,42 @@ int main(int argc, char** argv) {
   // WIP
   read_proc_pid_maps(child_pid);
 
+  debug_rip(child_pid);
+  debug_r15(child_pid);
+
   // Set a breakpoint.
+  enable_breakpoint(child_pid, 0x555555555164);
   enable_breakpoint(child_pid, 0x55555555516b);
-  //assert(ptrace(PTRACE_POKEDATA, child_pid, /*addr=*/0x55555555516b, /*data=*/0x90909090909090cc) != -1);
+  debug_bps();
+
+  // Execute up to the breakpoint.
   assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
   assert(waitpid(child_pid, &wstatus, 0) == child_pid);
   debug_wait_status(wstatus);
 
-  // Continue from breakpoint.
+  // %r15 should be not equal to 0x42.
+  debug_rip(child_pid);
+  debug_r15(child_pid);
+
+  // Rewind instruction pointer, restore the original instruction, and continue
+  // from there.
+  update_rip(child_pid, -1);
+  disable_breakpoint(child_pid, 0);
+  debug_bps();
+
+  // Continue to second breakpoint.
+  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
+  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
+  debug_wait_status(wstatus);
+
+  // %r15 should be equal to 0x42.
+  debug_rip(child_pid);
+  debug_r15(child_pid);
+
+  // Continue to end.
+  update_rip(child_pid, -1);
+  disable_breakpoint(child_pid, 0);
+  debug_bps();
   assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
   assert(waitpid(child_pid, &wstatus, 0) == child_pid);
   debug_wait_status(wstatus);
