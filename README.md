@@ -1,11 +1,23 @@
 # (WIP) Toy Debugger
 
-Goals:
+### To-do
+
+- [ ] breakpoint states: inactive/active (not user-controlled), enabled/disabled (user-controlled)
+  - enabled+active means the tracee will stop when the breakpoint is reached
+  - enabled+inactive means the tracee has hit the breakpoint and is currently stopped, and can hit the breakpoint again
+  - disabled+(anything) means the tracee will not stop when the breakpoint is reached
+- [ ] as soon as tracee hits a breakpoint, we make the breakpoint inactive (temporarily) and rewind the instruction pointer
+- [ ] to continue, we single step, make the breakpoint active, put the int3 instruction back in if needed, then continue
+- [ ] link zydis
+- [ ] implement ncurses ui
+
+### Long-term goals
 
 - Snapshot and restore a Linux process
 - Attach to running processes and set breakpoints on them
 
-Reading material:
+
+### Reading material:
 
 - https://iafisher.com/blog/2024/08/linux-process-tricks
 - https://github.com/checkpoint-restore/criu
