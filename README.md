@@ -2,8 +2,10 @@
 
 ### To-do
 
+- [ ] debug log macro
+- [ ] register command macro
 - [x] parse line into tokens
-- [ ] command line interface
+- [x] command line interface
 - [ ] breakpoint states: inactive/active (not user-controlled), enabled/disabled (user-controlled)
   - enabled+active means the tracee will stop when the breakpoint is reached
   - enabled+inactive means the tracee has hit the breakpoint and is currently stopped, and can hit the breakpoint again

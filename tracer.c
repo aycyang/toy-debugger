@@ -22,8 +22,10 @@
 #include "payload.h"
 
 #define MAX_LINE_SIZE (256)
+#define UNUSED(x) (void)(x)
 
 typedef struct {
+  char** argv;
   pid_t child_pid;
   bool is_running;
 } session_t;
@@ -144,9 +146,47 @@ void read_proc_pid_maps(pid_t pid) {
   }
 }
 
-void session_run(session_t* session, char** argv) {
+void session_continue(session_t* session, __attribute__((__unused__)) char* arg) {
+  printf("Continuing...\n");
+  if (!session->is_running) {
+    printf("No child process to continue.\n");
+    return;
+  }
+  assert(ptrace(PTRACE_CONT, session->child_pid, NULL, NULL) != -1);
+  int wstatus;
+  assert(waitpid(session->child_pid, &wstatus, 0) == session->child_pid);
+  debug_wait_status(wstatus);
+  // TODO Assumes child exited normally.
+  if (WIFEXITED(wstatus)) {
+    session->is_running = false;
+  }
+}
+
+void session_kill(session_t* session, __attribute__((__unused__)) char* arg) {
+  printf("Killing child process...\n");
   if (session->is_running) {
-    printf("already running\n");
+    printf("Sending SIGTERM to child process %d...\n", session->child_pid);
+    kill(session->child_pid, SIGTERM);
+    session_continue(session, NULL);
+    // TODO Assumes child process actually honored SIGTERM.
+    session->is_running = false;
+  } else {
+    printf("No child process to kill.\n");
+  }
+}
+
+void session_quit(session_t* session, __attribute__((__unused__)) char* arg) {
+  if (session->is_running) {
+    session_kill(session, arg);
+  }
+  printf("Bye!\n");
+  exit(0);
+}
+
+void session_run(session_t* session, __attribute__((__unused__)) char* arg) {
+  printf("Running...\n");
+  if (session->is_running) {
+    printf("Already running!\n");
     return;
   }
   pid_t child_pid = fork();
@@ -166,7 +206,7 @@ void session_run(session_t* session, char** argv) {
     // Turn off ASLR for the child process.
     personality(ADDR_NO_RANDOMIZE);
 
-    execv(argv[0], argv);
+    execv(session->argv[0], session->argv);
   }
   // The parent process follows this codepath.
   int wstatus;
@@ -176,6 +216,23 @@ void session_run(session_t* session, char** argv) {
   session->is_running = true;
   session->child_pid = child_pid;
 }
+
+typedef struct command {
+  char* name;
+  void (*function) (session_t*, char*);
+} command_t;
+const command_t commands[] = {
+  { "continue", session_continue },
+  { "cont", session_continue },
+  { "c", session_continue },
+  { "run", session_run },
+  { "r", session_run },
+  { "kill", session_kill },
+  { "k", session_kill },
+  { "quit", session_quit },
+  { "q", session_quit },
+};
+const size_t num_commands = sizeof(commands) / sizeof(command_t);
 
 bool is_whitespace(char c) {
   return c == ' ' || c == '\n' || c == '\t';
@@ -219,6 +276,7 @@ int main(int argc, char** argv) {
   }
 
   session_t session = {0};
+  session.argv = &argv[1];
 
   printf("Ready to run:");
   for (int i = 1; i < argc; i++) {
@@ -232,10 +290,18 @@ int main(int argc, char** argv) {
     char* t1 = NULL;
     char* t2 = NULL;
     tokenize2(line, &t1, &t2);
-    printf("t1: %s\n", t1);
-    printf("t2: %s\n", t2);
-    if (false) {
-      session_run(&session, &argv[1]);
+    if (t1 != NULL) {
+      bool command_found = false;
+      for (size_t i = 0; i < num_commands; i++) {
+        if (strcmp(t1, commands[i].name) == 0) {
+          commands[i].function(&session, t2);
+          command_found = true;
+          break;
+        }
+      }
+      if (!command_found) {
+        printf("Unrecognized command: %s\n", t1);
+      }
     }
     printf("> ");
   }
