@@ -1,3 +1,4 @@
+// Expose strsignal() and kill()
 #define _POSIX_C_SOURCE 200809L
 
 #include <assert.h>
@@ -19,6 +20,13 @@
 #include "stb_ds.h"
 
 #include "payload.h"
+
+#define MAX_LINE_SIZE (256)
+
+typedef struct {
+  pid_t child_pid;
+  bool is_running;
+} session_t;
 
 typedef struct {
   long long int addr;
@@ -59,26 +67,6 @@ void disable_breakpoint(pid_t pid, long long int addr) {
   word = (word & ~0xff) | (0xff & bp->byte);
   assert(ptrace(PTRACE_POKEDATA, pid, bp->addr, word) != -1);
   arrdel(breakpoints, i);
-}
-
-int has_zero_byte(long l) {
-  return
-    (l & 0x000000ff) == 0 ||
-    (l & 0x0000ff00) == 0 ||
-    (l & 0x00ff0000) == 0 ||
-    (l & 0xff000000) == 0;
-}
-
-// Warning: this can very easily overflow the passed-in buffer if the string is
-// too long, or isn't null-terminated, or isn't a string at all.
-void read_string_from_process_memory(pid_t child_pid, long long int addr, long* buf) {
-  int i = 0;
-  long word;
-  do {
-    word = ptrace(PTRACE_PEEKDATA, child_pid, addr + i * sizeof(long long int), NULL);
-    buf[i] = word;
-    i++;
-  } while (!has_zero_byte(word));
 }
 
 void debug_wait_status(int wait_status) {
@@ -132,7 +120,7 @@ void read_proc_pid_maps(pid_t pid) {
     while (fgets(line, 256, file)) {
       long long unsigned int start, end;
       sscanf(line, "%llx-%llx", &start, &end);
-      //printf("%s", line);
+      printf("%s", line);
       //printf("%llx, %llx\n", start, end);
       if (first_start == 0) first_start = start;
       if (first_end == 0) first_end = end;
@@ -156,13 +144,11 @@ void read_proc_pid_maps(pid_t pid) {
   }
 }
 
-int main(int argc, char** argv) {
-  if (argc <= 1) {
-    printf("Please pass in the path to the executable you want to debug,"
-      " followed by any arguments you want to pass to that executable.\n");
-    return 1;
+void session_run(session_t* session, char** argv) {
+  if (session->is_running) {
+    printf("already running\n");
+    return;
   }
-  char* exe_path = argv[1];
   pid_t child_pid = fork();
   assert(child_pid != -1);
   if (child_pid == 0) {
@@ -180,16 +166,45 @@ int main(int argc, char** argv) {
     // Turn off ASLR for the child process.
     personality(ADDR_NO_RANDOMIZE);
 
-    execv(exe_path, &argv[1]);
+    execv(argv[0], argv);
   }
   // The parent process follows this codepath.
   int wstatus;
   assert(waitpid(child_pid, &wstatus, 0) == child_pid);
   debug_wait_status(wstatus);
   // We are now attached to the child process.
+  session->is_running = true;
+  session->child_pid = child_pid;
+}
+
+int main(int argc, char** argv) {
+  if (argc <= 1) {
+    printf("Please pass in the path to the executable you want to debug,"
+      " followed by any arguments you want to pass to that executable.\n");
+    return 1;
+  }
+
+  session_t session = {0};
+
+  printf("Ready to run:");
+  for (int i = 1; i < argc; i++) {
+    printf(" %s", argv[i]);
+  }
+  printf("\n");
+
+  printf("> ");
+  char line[MAX_LINE_SIZE];
+  while (fgets(line, MAX_LINE_SIZE, stdin)) {
+    if (line[0] == 'r') {
+      session_run(&session, &argv[1]);
+    }
+    printf("> ");
+  }
+
+  /*
 
   // WIP
-  read_proc_pid_maps(child_pid);
+  //read_proc_pid_maps(child_pid);
 
   debug_rip(child_pid);
   debug_r15(child_pid);
@@ -198,12 +213,15 @@ int main(int argc, char** argv) {
   enable_breakpoint(child_pid, 0x555555555164);
   enable_breakpoint(child_pid, 0x55555555516b);
   debug_bps();
+  */
 
   // Execute up to the breakpoint.
-  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  debug_wait_status(wstatus);
+  //assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
+  //int wstatus;
+  //assert(waitpid(child_pid, &wstatus, 0) == child_pid);
+  //debug_wait_status(wstatus);
 
+  /*
   // %r15 should be not equal to 0x42.
   debug_rip(child_pid);
   debug_r15(child_pid);
@@ -213,23 +231,24 @@ int main(int argc, char** argv) {
   update_rip(child_pid, -1);
   disable_breakpoint(child_pid, 0);
   debug_bps();
+  */
 
   // Continue to second breakpoint.
-  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  debug_wait_status(wstatus);
+  //assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
+  //assert(waitpid(child_pid, &wstatus, 0) == child_pid);
+  //debug_wait_status(wstatus);
 
   // %r15 should be equal to 0x42.
-  debug_rip(child_pid);
-  debug_r15(child_pid);
+  //debug_rip(child_pid);
+  //debug_r15(child_pid);
 
   // Continue to end.
-  update_rip(child_pid, -1);
-  disable_breakpoint(child_pid, 0);
-  debug_bps();
-  assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  debug_wait_status(wstatus);
+  //update_rip(child_pid, -1);
+  //disable_breakpoint(child_pid, 0);
+  //debug_bps();
+  //assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
+  //assert(waitpid(child_pid, &wstatus, 0) == child_pid);
+  //debug_wait_status(wstatus);
 
   return 0;
 }
