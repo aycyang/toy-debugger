@@ -2,7 +2,7 @@
 
 ### To-do
 
-- [ ] parse line into tokens
+- [x] parse line into tokens
 - [ ] command line interface
 - [ ] breakpoint states: inactive/active (not user-controlled), enabled/disabled (user-controlled)
   - enabled+active means the tracee will stop when the breakpoint is reached

@@ -177,6 +177,40 @@ void session_run(session_t* session, char** argv) {
   session->child_pid = child_pid;
 }
 
+bool is_whitespace(char c) {
+  return c == ' ' || c == '\n' || c == '\t';
+}
+
+// Takes in a null-terminated input string, replacing all whitespace in-place
+// with null bytes, and returning pointers to the first two tokens.
+bool tokenize2(char* in, char** out1, char** out2) {
+  assert(in != NULL);
+  assert(*out1 == NULL);
+  assert(*out2 == NULL);
+  size_t size = strlen(in);
+  bool is_consuming_token = false;
+  for (size_t i = 0; i < size; i++) {
+    char c = *(in + i);
+    if (is_whitespace(c)) {
+      *(in + i) = '\0';
+      is_consuming_token = false;
+      if (*out2 != NULL) break;
+      continue;
+    }
+    if (*out1 == NULL && !is_consuming_token) {
+      *out1 = in + i;
+      is_consuming_token = true;
+      continue;
+    }
+    if (*out2 == NULL && !is_consuming_token) {
+      *out2 = in + i;
+      is_consuming_token = true;
+      continue;
+    }
+  }
+  return *out1 != NULL && *out2 != NULL;
+}
+
 int main(int argc, char** argv) {
   if (argc <= 1) {
     printf("Please pass in the path to the executable you want to debug,"
@@ -195,11 +229,17 @@ int main(int argc, char** argv) {
   printf("> ");
   char line[MAX_LINE_SIZE];
   while (fgets(line, MAX_LINE_SIZE, stdin)) {
-    if (line[0] == 'r') {
+    char* t1 = NULL;
+    char* t2 = NULL;
+    tokenize2(line, &t1, &t2);
+    printf("t1: %s\n", t1);
+    printf("t2: %s\n", t2);
+    if (false) {
       session_run(&session, &argv[1]);
     }
     printf("> ");
   }
+  printf("\n");
 
   /*
 
