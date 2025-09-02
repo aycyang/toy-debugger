@@ -39,6 +39,8 @@ typedef struct {
   pid_t child_pid;
   bool is_running;
   breakpoint_t* breakpoints;
+  // This is set to the breakpoint at which the tracee is stopped.
+  // If the tracee is not stopped at any breakpoint, this is NULL.
   breakpoint_t* current_breakpoint;
 } session_t;
 
@@ -126,6 +128,15 @@ breakpoint_t* find_breakpoint(breakpoint_t* bps, long long unsigned int addr) {
   return NULL;
 }
 
+void session_breakpoint_reactivate(session_t* session) {
+  assert(session->current_breakpoint != NULL);
+  long word = ptrace(PTRACE_PEEKDATA, session->child_pid, session->current_breakpoint->addr, NULL);
+  // Overwrite the least-significant byte with 0xcc, which is the x86 int3
+  // instruction.
+  word = (word & ~0xff) | 0xcc;
+  assert(ptrace(PTRACE_POKEDATA, session->child_pid, session->current_breakpoint->addr, word) != -1);
+}
+
 void session_breakpoint_deactivate(session_t* session) {
   assert(session->current_breakpoint != NULL);
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, session->current_breakpoint->addr, NULL);
@@ -140,10 +151,20 @@ void session_set_ip(session_t* session, long long unsigned int addr) {
   regs.rip = addr;
   assert(ptrace(PTRACE_SETREGS, session->child_pid, NULL, &regs) != -1);
 }
+
 long long unsigned int session_get_ip(session_t* session) {
   struct user_regs_struct regs;
   assert(ptrace(PTRACE_GETREGS, session->child_pid, NULL, &regs) != -1);
   return regs.rip;
+}
+
+void session_step(session_t* session, __attribute__((__unused__)) char* arg) {
+  printf("Stepping...\n");
+  assert(ptrace(PTRACE_SINGLESTEP, session->child_pid, NULL, NULL) != -1);
+  if (session->current_breakpoint != NULL) {
+    session_breakpoint_reactivate(session);
+    session->current_breakpoint = NULL;
+  }
 }
 
 void session_continue(session_t* session, __attribute__((__unused__)) char* arg) {
@@ -151,6 +172,9 @@ void session_continue(session_t* session, __attribute__((__unused__)) char* arg)
   if (!session->is_running) {
     printf("No child process to continue.\n");
     return;
+  }
+  if (session->current_breakpoint != NULL) {
+    session_step(session, NULL);
   }
   assert(ptrace(PTRACE_CONT, session->child_pid, NULL, NULL) != -1);
   int wstatus;
@@ -207,11 +231,6 @@ void session_peek(session_t* session, char* arg) {
   }
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, addr, NULL);
   printf("%llx: %lx\n", addr, word);
-}
-
-void session_step(session_t* session, __attribute__((__unused__)) char* arg) {
-  printf("Stepping...\n");
-  assert(ptrace(PTRACE_SINGLESTEP, session->child_pid, NULL, NULL) != -1);
 }
 
 void session_run(session_t* session, __attribute__((__unused__)) char* arg) {
