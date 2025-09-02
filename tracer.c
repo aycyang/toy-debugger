@@ -24,21 +24,25 @@
 #define MAX_LINE_SIZE (256)
 #define UNUSED(x) (void)(x)
 
-typedef struct {
-  char** argv;
-  pid_t child_pid;
-  bool is_running;
-} session_t;
 
 typedef struct {
   long long int addr;
   char byte;
+  bool is_enabled;
 } breakpoint_t;
 
 breakpoint_t* breakpoints = NULL;
 
+typedef struct {
+  char** argv;
+  pid_t child_pid;
+  bool is_running;
+  breakpoint_t* breakpoints;
+  breakpoint_t* current_breakpoint;
+} session_t;
+
 void enable_breakpoint(pid_t pid, long long int addr) {
-  breakpoint_t bp;
+  breakpoint_t bp = {0};
   bp.addr = addr;
   long word = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
   // Save the least-signficant byte so the instruction can be restored to its
@@ -146,6 +150,24 @@ void read_proc_pid_maps(pid_t pid) {
   }
 }
 
+/*
+breakpoint_t* find_breakpoint(breakpoint_t* bps, long long unsigned int addr) {
+  for (int i = 0; i < arrlen(bps), i++) {
+    if (bps[i].addr == addr) {
+      return &bps[i];
+    }
+  }
+  return NULL;
+}
+
+void breakpoint_deactivate(breakpoint_t* bp) {
+  long word = ptrace(PTRACE_PEEKDATA, pid, bp->addr, NULL);
+  word = (word & ~0xff) | (0xff & bp->byte);
+  assert(ptrace(PTRACE_POKEDATA, pid, bp->addr, word) != -1);
+  arrdel(breakpoints, i);
+}
+*/
+
 void session_continue(session_t* session, __attribute__((__unused__)) char* arg) {
   printf("Continuing...\n");
   if (!session->is_running) {
@@ -156,9 +178,21 @@ void session_continue(session_t* session, __attribute__((__unused__)) char* arg)
   int wstatus;
   assert(waitpid(session->child_pid, &wstatus, 0) == session->child_pid);
   debug_wait_status(wstatus);
-  // TODO Assumes child exited normally.
   if (WIFEXITED(wstatus)) {
     session->is_running = false;
+  } else if (WIFSTOPPED(wstatus)) {
+    switch (WSTOPSIG(wstatus)) {
+      case SIGSTOP:
+        // TODO Find breakpoint, restore the original byte, and rewind the
+        // instruction pointer.
+        //session->current_breakpoint = find_breakpoint(session->breakpoints);
+        //breakpoint_deactivate(session->current_breakpoint);
+        printf("unimplemented\n");
+        break;
+      case SIGTERM:
+        session->is_running = false;
+        break;
+    }
   }
 }
 
@@ -181,6 +215,11 @@ void session_quit(session_t* session, __attribute__((__unused__)) char* arg) {
   }
   printf("Bye!\n");
   exit(0);
+}
+
+void session_step(session_t* session, __attribute__((__unused__)) char* arg) {
+  printf("Stepping...\n");
+  assert(ptrace(PTRACE_SINGLESTEP, session->child_pid, NULL, NULL) != -1);
 }
 
 void session_run(session_t* session, __attribute__((__unused__)) char* arg) {
@@ -217,11 +256,61 @@ void session_run(session_t* session, __attribute__((__unused__)) char* arg) {
   session->child_pid = child_pid;
 }
 
+void session_regs(session_t* session, __attribute__((__unused__)) char* arg) {
+  if (!session->is_running) {
+    printf("No child process to inspect.\n");
+    return;
+  }
+  printf("Registers:\n");
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, session->child_pid, NULL, &regs) != -1);
+  printf("%%rip=0x%llx\n", regs.rip);
+  printf("%%r15=0x%llx\n", regs.r15);
+  printf("%%rdi=0x%llx\n", regs.rdi);
+}
+
+void session_break(session_t* session, char* arg) {
+  if (arg == NULL) {
+    printf("Usage: break <address>\n");
+    return;
+  }
+  if (!session->is_running) {
+    printf("Please run the child process before setting any breakpoints.\n");
+    return;
+  }
+  long long unsigned int addr;
+  if (sscanf(arg, "%llx", &addr) != 1) {
+    printf("Failed to parse: %s\n", arg);
+    return;
+  }
+
+  // TODO If breakpoint exists, don't create a new one.
+
+  breakpoint_t bp = {0};
+  bp.addr = addr;
+  long word = ptrace(PTRACE_PEEKDATA, session->child_pid, addr, NULL);
+  // Save the least-signficant byte so the instruction can be restored to its
+  // original state later.
+  bp.byte = word; // This assignment implicitly truncates.
+
+  // Overwrite the least-significant byte with 0xcc, which is the x86 int3
+  // instruction.
+  word = (word & ~0xff) | 0xcc;
+  assert(ptrace(PTRACE_POKEDATA, session->child_pid, addr, word) != -1);
+  arrput(session->breakpoints, bp);
+  printf("Set a breakpoint at %llx\n", addr);
+}
+
 typedef struct command {
   char* name;
   void (*function) (session_t*, char*);
 } command_t;
 const command_t commands[] = {
+  { "s", session_step },
+  { "regs", session_regs },
+  { "reg", session_regs },
+  { "break", session_break },
+  { "b", session_break },
   { "continue", session_continue },
   { "cont", session_continue },
   { "c", session_continue },
