@@ -26,8 +26,9 @@
 
 
 typedef struct {
-  long long int addr;
+  long long unsigned int addr;
   char byte;
+  // User-controlled toggle.
   bool is_enabled;
 } breakpoint_t;
 
@@ -40,40 +41,6 @@ typedef struct {
   breakpoint_t* breakpoints;
   breakpoint_t* current_breakpoint;
 } session_t;
-
-void enable_breakpoint(pid_t pid, long long int addr) {
-  breakpoint_t bp = {0};
-  bp.addr = addr;
-  long word = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
-  // Save the least-signficant byte so the instruction can be restored to its
-  // original state later.
-  bp.byte = word;
-  // Overwrite the least-significant byte with 0xcc, which is the x86 int3
-  // instruction.
-  word = (word & ~0xff) | 0xcc;
-  assert(ptrace(PTRACE_POKEDATA, pid, addr, word) != -1);
-  arrput(breakpoints, bp);
-}
-
-void disable_breakpoint(pid_t pid, long long int addr) {
-  int i = -1;
-  for (int j = 0; j < arrlen(breakpoints); j++) {
-    if (breakpoints[i].addr == addr) {
-      i = j;
-      break;
-    }
-  }
-  if (i == -1) {
-    printf("breakpoint not found at address 0x%llx\n", addr);
-    return;
-  }
-  // Restore the instruction to its original state.
-  breakpoint_t *bp = &breakpoints[i];
-  long word = ptrace(PTRACE_PEEKDATA, pid, bp->addr, NULL);
-  word = (word & ~0xff) | (0xff & bp->byte);
-  assert(ptrace(PTRACE_POKEDATA, pid, bp->addr, word) != -1);
-  arrdel(breakpoints, i);
-}
 
 void debug_wait_status(int wait_status) {
   if (WIFEXITED(wait_status)) {
@@ -150,9 +117,8 @@ void read_proc_pid_maps(pid_t pid) {
   }
 }
 
-/*
 breakpoint_t* find_breakpoint(breakpoint_t* bps, long long unsigned int addr) {
-  for (int i = 0; i < arrlen(bps), i++) {
+  for (int i = 0; i < arrlen(bps); i++) {
     if (bps[i].addr == addr) {
       return &bps[i];
     }
@@ -160,13 +126,25 @@ breakpoint_t* find_breakpoint(breakpoint_t* bps, long long unsigned int addr) {
   return NULL;
 }
 
-void breakpoint_deactivate(breakpoint_t* bp) {
-  long word = ptrace(PTRACE_PEEKDATA, pid, bp->addr, NULL);
-  word = (word & ~0xff) | (0xff & bp->byte);
-  assert(ptrace(PTRACE_POKEDATA, pid, bp->addr, word) != -1);
-  arrdel(breakpoints, i);
+void session_breakpoint_deactivate(session_t* session) {
+  assert(session->current_breakpoint != NULL);
+  long word = ptrace(PTRACE_PEEKDATA, session->child_pid, session->current_breakpoint->addr, NULL);
+  assert((word & 0xff) == 0xcc);
+  word = (word & ~0xff) | (0xff & session->current_breakpoint->byte);
+  assert(ptrace(PTRACE_POKEDATA, session->child_pid, session->current_breakpoint->addr, word) != -1);
 }
-*/
+
+void session_set_ip(session_t* session, long long unsigned int addr) {
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, session->child_pid, NULL, &regs) != -1);
+  regs.rip = addr;
+  assert(ptrace(PTRACE_SETREGS, session->child_pid, NULL, &regs) != -1);
+}
+long long unsigned int session_get_ip(session_t* session) {
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, session->child_pid, NULL, &regs) != -1);
+  return regs.rip;
+}
 
 void session_continue(session_t* session, __attribute__((__unused__)) char* arg) {
   printf("Continuing...\n");
@@ -182,13 +160,17 @@ void session_continue(session_t* session, __attribute__((__unused__)) char* arg)
     session->is_running = false;
   } else if (WIFSTOPPED(wstatus)) {
     switch (WSTOPSIG(wstatus)) {
-      case SIGSTOP:
+      case SIGTRAP: {
         // TODO Find breakpoint, restore the original byte, and rewind the
         // instruction pointer.
-        //session->current_breakpoint = find_breakpoint(session->breakpoints);
-        //breakpoint_deactivate(session->current_breakpoint);
-        printf("unimplemented\n");
-        break;
+        long long unsigned int addr = session_get_ip(session);
+        printf("%llx\n", addr);
+        session->current_breakpoint = find_breakpoint(session->breakpoints, addr - 1);
+        assert(session->current_breakpoint != NULL);
+        assert(session->current_breakpoint->is_enabled);
+        session_breakpoint_deactivate(session);
+        session_set_ip(session, addr - 1);
+      } break;
       case SIGTERM:
         session->is_running = false;
         break;
@@ -215,6 +197,16 @@ void session_quit(session_t* session, __attribute__((__unused__)) char* arg) {
   }
   printf("Bye!\n");
   exit(0);
+}
+
+void session_peek(session_t* session, char* arg) {
+  long long unsigned int addr;
+  if (sscanf(arg, "%llx", &addr) != 1) {
+    printf("Failed to parse: %s\n", arg);
+    return;
+  }
+  long word = ptrace(PTRACE_PEEKDATA, session->child_pid, addr, NULL);
+  printf("%llx: %lx\n", addr, word);
 }
 
 void session_step(session_t* session, __attribute__((__unused__)) char* arg) {
@@ -287,6 +279,7 @@ void session_break(session_t* session, char* arg) {
   // TODO If breakpoint exists, don't create a new one.
 
   breakpoint_t bp = {0};
+  bp.is_enabled = true;
   bp.addr = addr;
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, addr, NULL);
   // Save the least-signficant byte so the instruction can be restored to its
@@ -306,6 +299,7 @@ typedef struct command {
   void (*function) (session_t*, char*);
 } command_t;
 const command_t commands[] = {
+  { "peek", session_peek },
   { "s", session_step },
   { "regs", session_regs },
   { "reg", session_regs },
