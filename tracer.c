@@ -24,7 +24,6 @@
 #define MAX_LINE_SIZE (256)
 #define UNUSED(x) (void)(x)
 
-
 typedef struct {
   long long unsigned int addr;
   char byte;
@@ -130,7 +129,12 @@ breakpoint_t* find_breakpoint(breakpoint_t* bps, long long unsigned int addr) {
 
 void session_breakpoint_reactivate(session_t* session) {
   assert(session->current_breakpoint != NULL);
+  errno = 0;
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, session->current_breakpoint->addr, NULL);
+  if (errno != 0) {
+    printf("peek data failed: %d\n", errno);
+    exit(1);
+  }
   // Overwrite the least-significant byte with 0xcc, which is the x86 int3
   // instruction.
   word = (word & ~0xff) | 0xcc;
@@ -139,7 +143,12 @@ void session_breakpoint_reactivate(session_t* session) {
 
 void session_breakpoint_deactivate(session_t* session) {
   assert(session->current_breakpoint != NULL);
+  errno = 0;
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, session->current_breakpoint->addr, NULL);
+  if (errno != 0) {
+    printf("peek data failed: %d\n", errno);
+    exit(1);
+  }
   assert((word & 0xff) == 0xcc);
   word = (word & ~0xff) | (0xff & session->current_breakpoint->byte);
   assert(ptrace(PTRACE_POKEDATA, session->child_pid, session->current_breakpoint->addr, word) != -1);
@@ -161,6 +170,9 @@ long long unsigned int session_get_ip(session_t* session) {
 void session_step(session_t* session, __attribute__((__unused__)) char* arg) {
   printf("Stepping...\n");
   assert(ptrace(PTRACE_SINGLESTEP, session->child_pid, NULL, NULL) != -1);
+  int wstatus;
+  assert(waitpid(session->child_pid, &wstatus, 0) == session->child_pid);
+  debug_wait_status(wstatus);
   if (session->current_breakpoint != NULL) {
     session_breakpoint_reactivate(session);
     session->current_breakpoint = NULL;
@@ -185,8 +197,10 @@ void session_continue(session_t* session, __attribute__((__unused__)) char* arg)
   } else if (WIFSTOPPED(wstatus)) {
     switch (WSTOPSIG(wstatus)) {
       case SIGTRAP: {
-        // TODO Find breakpoint, restore the original byte, and rewind the
+        // Find breakpoint, restore the original byte, and rewind the
         // instruction pointer.
+        // TODO Rewind the instruction pointer and return it at the same time
+        // to save on ptrace calls.
         long long unsigned int addr = session_get_ip(session);
         printf("%llx\n", addr);
         session->current_breakpoint = find_breakpoint(session->breakpoints, addr - 1);
@@ -319,6 +333,7 @@ typedef struct command {
 } command_t;
 const command_t commands[] = {
   { "peek", session_peek },
+  { "step", session_step },
   { "s", session_step },
   { "regs", session_regs },
   { "reg", session_regs },
