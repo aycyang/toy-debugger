@@ -19,6 +19,8 @@
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 
+#include <Zydis/Zydis.h>
+
 #include "payload.h"
 
 #define MAX_LINE_SIZE (256)
@@ -41,6 +43,8 @@ typedef struct {
   // This is set to the breakpoint at which the tracee is stopped.
   // If the tracee is not stopped at any breakpoint, this is NULL.
   breakpoint_t* current_breakpoint;
+  ZydisDecoder zydis_decoder;
+  ZydisFormatter zydis_formatter;
 } session_t;
 
 void debug_wait_status(int wait_status) {
@@ -179,6 +183,17 @@ void session_step(session_t* session, __attribute__((__unused__)) char* arg) {
   }
 }
 
+void session_disasm(session_t* session, long long unsigned int addr) {
+  long word = ptrace(PTRACE_PEEKDATA, session->child_pid, addr, NULL);
+  ZydisDecodedInstruction instruction;
+  ZydisDecodedOperand operands[10];
+  assert(ZYAN_SUCCESS(ZydisDecoderDecodeFull(&session->zydis_decoder, &word, sizeof(word), &instruction, operands)));
+  char buffer[256];
+  ZydisFormatterFormatInstruction(&session->zydis_formatter, &instruction, operands, ZYDIS_MAX_OPERAND_COUNT_VISIBLE, buffer, sizeof(buffer), addr, ZYAN_NULL);
+
+  printf("%s\n", buffer);
+}
+
 void session_continue(session_t* session, __attribute__((__unused__)) char* arg) {
   printf("Continuing...\n");
   if (!session->is_running) {
@@ -201,13 +216,13 @@ void session_continue(session_t* session, __attribute__((__unused__)) char* arg)
         // instruction pointer.
         // TODO Rewind the instruction pointer and return it at the same time
         // to save on ptrace calls.
-        long long unsigned int addr = session_get_ip(session);
-        printf("%llx\n", addr);
-        session->current_breakpoint = find_breakpoint(session->breakpoints, addr - 1);
+        long long unsigned int ip = session_get_ip(session);
+        session->current_breakpoint = find_breakpoint(session->breakpoints, ip - 1);
         assert(session->current_breakpoint != NULL);
         assert(session->current_breakpoint->is_enabled);
         session_breakpoint_deactivate(session);
-        session_set_ip(session, addr - 1);
+        session_set_ip(session, ip - 1);
+        session_disasm(session, ip - 1);
       } break;
       case SIGTERM:
         session->is_running = false;
@@ -393,6 +408,8 @@ int main(int argc, char** argv) {
   }
 
   session_t session = {0};
+  ZydisDecoderInit(&session.zydis_decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
+  ZydisFormatterInit(&session.zydis_formatter, ZYDIS_FORMATTER_STYLE_ATT);
   session.argv = &argv[1];
 
   printf("Ready to run:");
@@ -423,55 +440,6 @@ int main(int argc, char** argv) {
     printf("> ");
   }
   printf("\n");
-
-  /*
-
-  // WIP
-  //read_proc_pid_maps(child_pid);
-
-  debug_rip(child_pid);
-  debug_r15(child_pid);
-
-  // Set a breakpoint.
-  enable_breakpoint(child_pid, 0x555555555164);
-  enable_breakpoint(child_pid, 0x55555555516b);
-  debug_bps();
-  */
-
-  // Execute up to the breakpoint.
-  //assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  //int wstatus;
-  //assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  //debug_wait_status(wstatus);
-
-  /*
-  // %r15 should be not equal to 0x42.
-  debug_rip(child_pid);
-  debug_r15(child_pid);
-
-  // Rewind instruction pointer, restore the original instruction, and continue
-  // from there.
-  update_rip(child_pid, -1);
-  disable_breakpoint(child_pid, 0);
-  debug_bps();
-  */
-
-  // Continue to second breakpoint.
-  //assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  //assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  //debug_wait_status(wstatus);
-
-  // %r15 should be equal to 0x42.
-  //debug_rip(child_pid);
-  //debug_r15(child_pid);
-
-  // Continue to end.
-  //update_rip(child_pid, -1);
-  //disable_breakpoint(child_pid, 0);
-  //debug_bps();
-  //assert(ptrace(PTRACE_CONT, child_pid, /*addr=*/NULL, /*data=*/NULL) != -1);
-  //assert(waitpid(child_pid, &wstatus, 0) == child_pid);
-  //debug_wait_status(wstatus);
 
   return 0;
 }
