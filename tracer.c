@@ -421,6 +421,9 @@ int main(int argc, char** argv) {
   printf("> ");
   char line[MAX_LINE_SIZE];
   while (fgets(line, MAX_LINE_SIZE, stdin)) {
+    if (!isatty(fileno(stdin))) {
+      printf("%s", line);
+    }
     char* t1 = NULL;
     char* t2 = NULL;
     tokenize2(line, &t1, &t2);
