@@ -191,7 +191,7 @@ void session_disasm(session_t* session, long long unsigned int addr) {
   char buffer[256];
   ZydisFormatterFormatInstruction(&session->zydis_formatter, &instruction, operands, ZYDIS_MAX_OPERAND_COUNT_VISIBLE, buffer, sizeof(buffer), addr, ZYAN_NULL);
 
-  printf("%s\n", buffer);
+  printf("0x%016llx  %s\n", addr, buffer);
 }
 
 void session_continue(session_t* session, __attribute__((__unused__)) char* arg) {
