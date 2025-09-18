@@ -2,6 +2,10 @@
 
 ### To-do
 
+- [ ] read characters into line buffer
+- [ ] re-integrate with command system
+- [ ] poc render text in boxes
+- [ ] show disassembly in a box
 - [x] parse line into tokens
 - [x] command line interface
 - [x] breakpoint states: inactive/active (not user-controlled), enabled/disabled (user-controlled)
@@ -11,7 +15,7 @@
 - [x] as soon as tracee hits a breakpoint, we make the breakpoint inactive (temporarily) and rewind the instruction pointer
 - [x] to continue, we single step, make the breakpoint active, put the int3 instruction back in if needed, then continue
 - [x] link zydis
-- [ ] implement ncurses ui
+- [x] implement ncurses ui
 
 ### Long-term goals
 

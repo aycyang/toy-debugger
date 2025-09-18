@@ -15,13 +15,14 @@
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <locale.h>
 
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 
 #include <Zydis/Zydis.h>
 
-#include "payload.h"
+#include <curses.h>
 
 #define MAX_LINE_SIZE (256)
 #define UNUSED(x) (void)(x)
@@ -190,7 +191,6 @@ void session_disasm(session_t* session, long long unsigned int addr) {
   assert(ZYAN_SUCCESS(ZydisDecoderDecodeFull(&session->zydis_decoder, &word, sizeof(word), &instruction, operands)));
   char buffer[256];
   ZydisFormatterFormatInstruction(&session->zydis_formatter, &instruction, operands, ZYDIS_MAX_OPERAND_COUNT_VISIBLE, buffer, sizeof(buffer), addr, ZYAN_NULL);
-
   printf("0x%016llx  %s\n", addr, buffer);
 }
 
@@ -412,6 +412,55 @@ int main(int argc, char** argv) {
   ZydisFormatterInit(&session.zydis_formatter, ZYDIS_FORMATTER_STYLE_ATT);
   session.argv = &argv[1];
 
+  // ncurses preamble
+  setlocale(LC_ALL, "");
+  initscr();
+  noecho();
+  cbreak();
+  intrflush(stdscr, FALSE);
+  keypad(stdscr, TRUE);
+
+  int ch;
+  int height = getmaxy(stdscr);
+  mvprintw(height - 1, 0, ">");
+  // main loop
+  while ((ch = getch()) != 4) { // Ctrl-D
+    int row, col;
+    getyx(stdscr, row, col);
+    move(height - 2, 0);
+    clrtoeol();
+    printw("%d", ch);
+    move(row, col);
+    switch (ch) {
+      case 258: // down
+        break;
+      case 259: // up
+        break;
+      case 260: // left
+        break;
+      case 261: // right
+        break;
+      case 263: // backspace
+        if (col <= 1) break;
+        move(row, col - 1);
+        delch();
+        break;
+      case 10: // enter
+        move(row, 1);
+        clrtoeol();
+        break;
+      default:
+        addch(ch);
+        move(row, col + 1);
+        break;
+    }
+  }
+  refresh();
+
+  // ncurses teardown
+  return endwin();
+
+/*
   printf("Ready to run:");
   for (int i = 1; i < argc; i++) {
     printf(" %s", argv[i]);
@@ -443,6 +492,7 @@ int main(int argc, char** argv) {
     printf("> ");
   }
   printf("\n");
+  */
 
   return 0;
 }
