@@ -39,6 +39,5 @@ CFLAGS="-std=c99 \
 	-fsanitize=undefined,address,pointer-compare,pointer-subtract \
 	-g3 -march=native"
 
-gcc $CFLAGS main.c
 gcc $CFLAGS register.c -o register
-gcc $CFLAGS stack.c -o stack
+gcc $CFLAGS nested_frames.c -o nested_frames

@@ -252,6 +252,18 @@ void session_quit(session_t* session, __attribute__((__unused__)) char* arg) {
   exit(0);
 }
 
+void session_backtrace(session_t* session, __attribute__((__unused__)) char* arg) {
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, session->child_pid, NULL, &regs) != -1);
+  long cur = regs.rbp;
+  while (cur != 0) {
+    printf("frame=%lx\n", cur);
+    cur = ptrace(PTRACE_PEEKDATA, session->child_pid, cur, NULL);
+    long value = ptrace(PTRACE_PEEKDATA, session->child_pid, cur+8, NULL);
+    printf("ip=%lx\n", value);
+  }
+}
+
 void session_peek(session_t* session, char* arg) {
   long long unsigned int addr;
   if (sscanf(arg, "%llx", &addr) != 1) {
@@ -354,6 +366,7 @@ const command_t commands[] = {
   { "reg", session_regs },
   { "break", session_break },
   { "b", session_break },
+  { "bt", session_backtrace },
   { "continue", session_continue },
   { "cont", session_continue },
   { "c", session_continue },
