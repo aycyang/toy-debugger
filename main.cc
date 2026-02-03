@@ -1,6 +1,9 @@
 // Expose strsignal() and kill()
 #define _POSIX_C_SOURCE 200809L
 
+#include <string>
+#include <vector>
+
 #include <assert.h>
 #include <errno.h>
 #include <signal.h>
@@ -17,9 +20,6 @@
 #include <unistd.h>
 #include <locale.h>
 
-#define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
-
 #include <Zydis/Zydis.h>
 
 #include <curses.h>
@@ -28,22 +28,22 @@
 #define UNUSED(x) (void)(x)
 
 typedef struct {
-  long long unsigned int addr;
-  char byte;
+  long long unsigned int addr = 0;
+  char byte = 0;
   // User-controlled toggle.
-  bool is_enabled;
+  bool is_enabled = 0;
 } breakpoint_t;
 
 breakpoint_t* breakpoints = NULL;
 
 typedef struct {
-  char** argv;
-  pid_t child_pid;
-  bool is_running;
-  breakpoint_t* breakpoints;
+  char** argv = 0;
+  pid_t child_pid = 0;
+  bool is_running = 0;
+  std::vector<breakpoint_t> breakpoints;
   // This is set to the breakpoint at which the tracee is stopped.
   // If the tracee is not stopped at any breakpoint, this is NULL.
-  breakpoint_t* current_breakpoint;
+  breakpoint_t* current_breakpoint = 0;
   ZydisDecoder zydis_decoder;
   ZydisFormatter zydis_formatter;
 } session_t;
@@ -79,14 +79,6 @@ void debug_rip(pid_t pid) {
   printf("%%rip=0x%llx\n", regs.rip);
 }
 
-void debug_bps(void) {
-  printf("=== BREAKPOINTS ===\n");
-  for (int i = 0; i < arrlen(breakpoints); i++) {
-    printf("0x%llx\n", breakpoints[i].addr);
-  }
-  printf("===================\n");
-}
-
 void read_proc_pid_maps(pid_t pid) {
   long long unsigned int first_start = 0, first_end = 0;
   {
@@ -117,16 +109,16 @@ void read_proc_pid_maps(pid_t pid) {
       assert(0);
     }
     assert(fseek(file, first_start, SEEK_SET) == 0);
-    char tst[5] = "\0\0\0\0\0";
+    char tst[5] = "\0\0\0\0";
     fread(tst, sizeof(char), 4, file);
     //printf("%s\n", tst);
   }
 }
 
-breakpoint_t* find_breakpoint(breakpoint_t* bps, long long unsigned int addr) {
-  for (int i = 0; i < arrlen(bps); i++) {
-    if (bps[i].addr == addr) {
-      return &bps[i];
+breakpoint_t* find_breakpoint(std::vector<breakpoint_t>& bps, long long unsigned int addr) {
+  for (auto& bp : bps) {
+    if (bp.addr == addr) {
+      return &bp;
     }
   }
   return NULL;
@@ -338,7 +330,7 @@ void session_break(session_t* session, char* arg) {
 
   // TODO If breakpoint exists, don't create a new one.
 
-  breakpoint_t bp = {0};
+  breakpoint_t bp;
   bp.is_enabled = true;
   bp.addr = addr;
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, addr, NULL);
@@ -350,12 +342,12 @@ void session_break(session_t* session, char* arg) {
   // instruction.
   word = (word & ~0xff) | 0xcc;
   assert(ptrace(PTRACE_POKEDATA, session->child_pid, addr, word) != -1);
-  arrput(session->breakpoints, bp);
+  session->breakpoints.push_back(bp);
   printf("Set a breakpoint at %llx\n", addr);
 }
 
 typedef struct command {
-  char* name;
+  std::string name;
   void (*function) (session_t*, char*);
 } command_t;
 const command_t commands[] = {
@@ -420,11 +412,12 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  session_t session = {0};
+  session_t session;
   ZydisDecoderInit(&session.zydis_decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
   ZydisFormatterInit(&session.zydis_formatter, ZYDIS_FORMATTER_STYLE_ATT);
   session.argv = &argv[1];
 
+/*
   // ncurses preamble
   setlocale(LC_ALL, "");
   initscr();
@@ -472,8 +465,8 @@ int main(int argc, char** argv) {
 
   // ncurses teardown
   return endwin();
+  */
 
-/*
   printf("Ready to run:");
   for (int i = 1; i < argc; i++) {
     printf(" %s", argv[i]);
@@ -492,7 +485,7 @@ int main(int argc, char** argv) {
     if (t1 != NULL) {
       bool command_found = false;
       for (size_t i = 0; i < num_commands; i++) {
-        if (strcmp(t1, commands[i].name) == 0) {
+        if (strcmp(t1, commands[i].name.c_str()) == 0) {
           commands[i].function(&session, t2);
           command_found = true;
           break;
@@ -505,7 +498,6 @@ int main(int argc, char** argv) {
     printf("> ");
   }
   printf("\n");
-  */
 
   return 0;
 }

@@ -2,7 +2,8 @@
 
 ### To-do
 
-- [ ] read characters into line buffer
+- [x] migrate codebase from C to C++
+- [ ] write command history to a std::queue
 - [ ] re-integrate with command system
 - [ ] poc render text in boxes
 - [ ] show disassembly in a box
