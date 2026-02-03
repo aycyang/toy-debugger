@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
-project(MyDebugger VERSION 0.1)
+project(ToyDebugger VERSION 0.1)
 
+set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_BUILD_TYPE Debug)
 
@@ -8,9 +9,10 @@ find_package(Curses REQUIRED)
 
 add_subdirectory(dependencies/zydis)
 
-add_executable(MyDebugger main.cc)
+add_executable(ToyDebugger main.cc)
+add_executable(TestProgram test_program.c)
 
-target_compile_options(MyDebugger PRIVATE -Wall -Wextra -Wpedantic -g)
+target_compile_options(ToyDebugger PRIVATE -Wall -Wextra -Wpedantic -g)
 
-target_include_directories(MyDebugger PRIVATE ${CURSES_INCLUDE_DIR})
-target_link_libraries(MyDebugger PRIVATE Zydis ${CURSES_LIBRARIES})
+target_include_directories(ToyDebugger PRIVATE ${CURSES_INCLUDE_DIR})
+target_link_libraries(ToyDebugger PRIVATE Zydis ${CURSES_LIBRARIES})
