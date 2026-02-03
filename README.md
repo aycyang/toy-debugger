@@ -1,12 +1,29 @@
 # (WIP) Toy Debugger
 
+### Quick start
+
+```
+cmake -B build
+cmake --build build
+build/ToyDebugger build/TestProgram
+run
+break 55555555511d # figure this out using /proc/pid/maps and objdump -d
+continue
+regs
+step
+regs
+continue
+quit
+```
+
 ### To-do
 
-- [x] migrate codebase from C to C++
 - [ ] write command history to a std::queue
 - [ ] re-integrate with command system
 - [ ] poc render text in boxes
 - [ ] show disassembly in a box
+- [ ] make core backend-agnostic and implement imgui and curses backends
+- [x] migrate codebase from C to C++
 - [x] parse line into tokens
 - [x] command line interface
 - [x] breakpoint states: inactive/active (not user-controlled), enabled/disabled (user-controlled)
@@ -21,7 +38,7 @@
 ### Long-term goals
 
 - Snapshot and restore a Linux process
-- Attach to running processes and set breakpoints on them
+- Time-travel debugging (i.e. reverse stepping)
 
 ### Reading material
 
