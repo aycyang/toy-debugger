@@ -18,10 +18,14 @@ quit
 
 ### To-do
 
-- [ ] write command history to a std::queue
-- [ ] re-integrate with command system
-- [ ] poc render text in boxes
+- [x] poc render text in boxes
+- [x] write command history to a scrollback buffer
+- [x] re-integrate with command system
+- [x] draw borders around windows for debugging purposes
+- [ ] implement text wrapping utility for wrapping text in a window
+- [ ] support non-wrapping text overflow for windows as well
 - [ ] show disassembly in a box
+- [ ] support terminal resizing
 - [ ] make core backend-agnostic and implement imgui and curses backends
 - [x] migrate codebase from C to C++
 - [x] parse line into tokens
