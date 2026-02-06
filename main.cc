@@ -27,6 +27,8 @@
 
 #include <curses.h>
 
+#include "util.h"
+
 #define MAX_LINE_SIZE (256)
 #define UNUSED(x) (void)(x)
 
@@ -40,11 +42,17 @@ typedef struct {
 breakpoint_t* breakpoints = NULL;
 
 typedef struct {
+  void log(std::basic_stringstream<char> ss) {
+    output_lines.push_back(ss.str());
+  }
+  void log(std::string s) {
+    output_lines.push_back(s);
+  }
   char** argv = 0;
   pid_t child_pid = 0;
   bool is_running = 0;
   // TODO make this a ring buffer so it's not growing unboundedly
-  std::basic_stringstream<char> scrollback_buf;
+  std::vector<std::string> output_lines;
   std::vector<breakpoint_t> breakpoints;
   // This is set to the breakpoint at which the tracee is stopped.
   // If the tracee is not stopped at any breakpoint, this is NULL.
@@ -55,13 +63,13 @@ typedef struct {
 
 void debug_wait_status(session_t* session, int wait_status) {
   if (WIFEXITED(wait_status)) {
-    session->scrollback_buf << "child process exited\n";
+    session->log("child process exited");
   } else if (WIFSTOPPED(wait_status)) {
     int signum = WSTOPSIG(wait_status);
     const char* str = strsignal(signum);
-    session->scrollback_buf << "child process stopped because: " << str << std::endl;
+    session->log(std::string("child process stopped because: ") + str);
   } else {
-    session->scrollback_buf << "child process status unknown\n";
+    session->log("child process status unknown");
   }
 }
 
@@ -79,7 +87,7 @@ void session_breakpoint_reactivate(session_t* session) {
   errno = 0;
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, session->current_breakpoint->addr, NULL);
   if (errno != 0) {
-    session->scrollback_buf << "peek data failed: " << errno << std::endl;
+    session->log(std::basic_stringstream<char>() << "peek data failed: " << errno);
     exit(1);
   }
   // Overwrite the least-significant byte with 0xcc, which is the x86 int3
@@ -93,7 +101,7 @@ void session_breakpoint_deactivate(session_t* session) {
   errno = 0;
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, session->current_breakpoint->addr, NULL);
   if (errno != 0) {
-    session->scrollback_buf << "peek data failed: " << errno << std::endl;
+    session->log(std::basic_stringstream<char>() << "peek data failed: " << errno);
     exit(1);
   }
   assert((word & 0xff) == 0xcc);
@@ -114,8 +122,8 @@ long long unsigned int session_get_ip(session_t* session) {
   return regs.rip;
 }
 
-void session_step(session_t* session, __attribute__((__unused__)) std::string arg) {
-  session->scrollback_buf << "Stepping...\n";
+void session_step(session_t* session, std::string arg) {
+  session->log("Stepping...");
   assert(ptrace(PTRACE_SINGLESTEP, session->child_pid, NULL, NULL) != -1);
   int wstatus;
   assert(waitpid(session->child_pid, &wstatus, 0) == session->child_pid);
@@ -133,17 +141,17 @@ void session_disasm(session_t* session, long long unsigned int addr) {
   assert(ZYAN_SUCCESS(ZydisDecoderDecodeFull(&session->zydis_decoder, &word, sizeof(word), &instruction, operands)));
   char buffer[256];
   ZydisFormatterFormatInstruction(&session->zydis_formatter, &instruction, operands, ZYDIS_MAX_OPERAND_COUNT_VISIBLE, buffer, sizeof(buffer), addr, ZYAN_NULL);
-  session->scrollback_buf << "0x" << addr << "  " << buffer << std::endl;
+  session->log(std::basic_stringstream<char>() << "0x" << std::hex << addr << "  " << buffer);
 }
 
-void session_continue(session_t* session, __attribute__((__unused__)) std::string arg) {
-  session->scrollback_buf << "Continuing...\n";
+void session_continue(session_t* session, std::string arg) {
+  session->log("Continuing...");
   if (!session->is_running) {
-    session->scrollback_buf << "No child process to continue.\n";
+    session->log("No child process to continue.");
     return;
   }
   if (session->current_breakpoint != NULL) {
-    session_step(session, NULL);
+    session_step(session, "");
   }
   assert(ptrace(PTRACE_CONT, session->child_pid, NULL, NULL) != -1);
   int wstatus;
@@ -173,20 +181,20 @@ void session_continue(session_t* session, __attribute__((__unused__)) std::strin
   }
 }
 
-void session_kill(session_t* session, __attribute__((__unused__)) std::string arg) {
-  session->scrollback_buf << "Killing child process...\n";
+void session_kill(session_t* session, std::string arg) {
+  session->log("Killing child process...");
   if (session->is_running) {
-    session->scrollback_buf << "Sending SIGTERM to child process " << session->child_pid << "...\n";
+    session->log(std::basic_stringstream<char>() << "Sending SIGTERM to child process " << session->child_pid);
     kill(session->child_pid, SIGTERM);
-    session_continue(session, NULL);
+    session_continue(session, "");
     // TODO Assumes child process actually honored SIGTERM.
     session->is_running = false;
   } else {
-    session->scrollback_buf << "No child process to kill.\n";
+    session->log("No child process to kill.");
   }
 }
 
-void session_quit(session_t* session, __attribute__((__unused__)) std::string arg) {
+void session_quit(session_t* session, std::string arg) {
   if (session->is_running) {
     session_kill(session, arg);
   }
@@ -195,32 +203,32 @@ void session_quit(session_t* session, __attribute__((__unused__)) std::string ar
   exit(0);
 }
 
-void session_backtrace(session_t* session, __attribute__((__unused__)) std::string arg) {
+void session_backtrace(session_t* session, std::string arg) {
   struct user_regs_struct regs;
   assert(ptrace(PTRACE_GETREGS, session->child_pid, NULL, &regs) != -1);
   long cur = regs.rbp;
   while (cur != 0) {
-    session->scrollback_buf << "frame=" << cur << std::endl;
+    session->log(std::basic_stringstream<char>() << "frame=" << cur);
     cur = ptrace(PTRACE_PEEKDATA, session->child_pid, cur, NULL);
     long value = ptrace(PTRACE_PEEKDATA, session->child_pid, cur+8, NULL);
-    session->scrollback_buf << "ip=" << value << std::endl;
+    session->log(std::basic_stringstream<char>() << "ip=" << value);
   }
 }
 
 void session_peek(session_t* session, std::string arg) {
   long long unsigned int addr;
   if (sscanf(arg.c_str(), "%llx", &addr) != 1) {
-    session->scrollback_buf << "Failed to parse: " << arg << std::endl;
+    session->log(std::basic_stringstream<char>() << "Failed to parse: " << arg);
     return;
   }
   long word = ptrace(PTRACE_PEEKDATA, session->child_pid, addr, NULL);
-  session->scrollback_buf << addr << ": " << word << std::endl;
+  session->log(std::basic_stringstream<char>() << "0x" << std::hex << addr << ": " << word);
 }
 
-void session_run(session_t* session, __attribute__((__unused__)) std::string arg) {
-  session->scrollback_buf << "Running...\n";
+void session_run(session_t* session, std::string arg) {
+  session->log( "Running...");
   if (session->is_running) {
-    session->scrollback_buf << "Already running!\n";
+    session->log( "Already running!");
     return;
   }
   pid_t child_pid = fork();
@@ -251,31 +259,31 @@ void session_run(session_t* session, __attribute__((__unused__)) std::string arg
   session->child_pid = child_pid;
 }
 
-void session_regs(session_t* session, __attribute__((__unused__)) std::string arg) {
+void session_regs(session_t* session, std::string arg) {
   if (!session->is_running) {
-    session->scrollback_buf << "No child process to inspect.\n";
+    session->log( "No child process to inspect.");
     return;
   }
-  session->scrollback_buf << "Registers:\n";
+  session->log( "Registers:");
   struct user_regs_struct regs;
   assert(ptrace(PTRACE_GETREGS, session->child_pid, NULL, &regs) != -1);
-  session->scrollback_buf << "%rip=0x" << regs.rip << std::endl;
-  session->scrollback_buf << "%r15=0x" << regs.r15 << std::endl;
-  session->scrollback_buf << "%rdi=0x" << regs.rdi << std::endl;
+  session->log(std::basic_stringstream<char>() << "%rip=0x" << std::hex << regs.rip);
+  session->log(std::basic_stringstream<char>() << "%r15=0x" << std::hex << regs.r15);
+  session->log(std::basic_stringstream<char>() << "%rdi=0x" << std::hex << regs.rdi);
 }
 
 void session_break(session_t* session, std::string arg) {
   if (arg.empty()) {
-    session->scrollback_buf << "Usage: break <address>\n";
+    session->log( "Usage: break <address>");
     return;
   }
   if (!session->is_running) {
-    session->scrollback_buf << "Please run the child process before setting any breakpoints.\n";
+    session->log( "Please run the child process before setting any breakpoints.");
     return;
   }
   long long unsigned int addr;
   if (sscanf(arg.c_str(), "%llx", &addr) != 1) {
-    session->scrollback_buf << "Failed to parse: " << arg << std::endl;
+    session->log( std::basic_stringstream<char>() << "Failed to parse: " << arg);
     return;
   }
 
@@ -294,7 +302,7 @@ void session_break(session_t* session, std::string arg) {
   word = (word & ~0xff) | 0xcc;
   assert(ptrace(PTRACE_POKEDATA, session->child_pid, addr, word) != -1);
   session->breakpoints.push_back(bp);
-  session->scrollback_buf << "Set a breakpoint at " << addr << std::endl;
+  session->log( std::basic_stringstream<char>() << "Set a breakpoint at 0x" << std::hex << addr);
 }
 
 typedef struct command {
@@ -384,7 +392,7 @@ void dispatchCmd(session_t* session, std::string line) {
     return cmd.name == tokens[0];
   });
   if (it == commands.end()) {
-    session->scrollback_buf << "Unrecognized command: " << tokens[0] << std::endl;
+    session->log( std::basic_stringstream<char>() << "Unrecognized command: " << tokens[0]);
     return;
   }
   if (tokens.size() == 1) {
@@ -444,7 +452,7 @@ int main(int argc, char** argv) {
         delch();
         break;
       case 10: // enter
-        session.scrollback_buf << "> " << cur_line << std::endl;
+        session.log("> " + cur_line);
         if (!cur_line.empty()) {
           dispatchCmd(&session, cur_line);
         }
@@ -461,8 +469,25 @@ int main(int argc, char** argv) {
 
     {
       wclear(win);
-      mvwprintw(win, 1, 1, "%s\n", session.scrollback_buf.str().c_str());
       wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
+
+      const size_t height = 10;
+      const size_t width = 80;
+      std::vector<std::string> visible_lines;
+      for (auto it = session.output_lines.rbegin(); it != session.output_lines.rend(); it++) {
+        std::vector<std::string> wrapped_lines = wrapTo(*it, width - 2);
+        for (auto it2 = wrapped_lines.rbegin(); it2 != wrapped_lines.rend(); it2++) {
+          visible_lines.push_back(*it2);
+          if (visible_lines.size() >= height - 2) break;
+        }
+        if (visible_lines.size() >= height - 2) break;
+      }
+
+      std::reverse(visible_lines.begin(), visible_lines.end());
+      for (size_t i = 0; i < visible_lines.size(); i++) {
+        mvwprintw(win, 1 + i, 1, "%s", visible_lines[i].c_str());
+      }
+
       wrefresh(win);
     }
 

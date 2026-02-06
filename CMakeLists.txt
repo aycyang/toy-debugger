@@ -12,7 +12,7 @@ add_subdirectory(dependencies/zydis)
 add_executable(ToyDebugger main.cc)
 add_executable(TestProgram test_program.c)
 
-target_compile_options(ToyDebugger PRIVATE -Wall -Wextra -Wpedantic -g)
+target_compile_options(ToyDebugger PRIVATE -Wall -Werror -Wpedantic -g)
 
 target_include_directories(ToyDebugger PRIVATE ${CURSES_INCLUDE_DIR})
 target_link_libraries(ToyDebugger PRIVATE Zydis ${CURSES_LIBRARIES})
