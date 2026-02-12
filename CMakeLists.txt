@@ -9,7 +9,7 @@ find_package(Curses REQUIRED)
 
 add_subdirectory(dependencies/zydis)
 
-add_executable(ToyDebugger main.cc)
+add_executable(ToyDebugger main.cc mem.cc)
 add_executable(TestProgram test_program.c)
 
 target_compile_options(ToyDebugger PRIVATE -Wall -Werror -Wpedantic -g)

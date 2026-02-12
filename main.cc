@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 
+#include <elf.h>
 #include <assert.h>
 #include <errno.h>
 #include <signal.h>
@@ -28,6 +29,7 @@
 #include <curses.h>
 
 #include "util.h"
+#include "mem.h"
 
 #define MAX_LINE_SIZE (256)
 #define UNUSED(x) (void)(x)
@@ -257,6 +259,13 @@ void session_run(session_t* session, std::string arg) {
   // We are now attached to the child process.
   session->is_running = true;
   session->child_pid = child_pid;
+
+  // tmp
+  session->log(std::basic_stringstream<char>() << "### 0x" << std::hex << getExecutableMappedPageBasePtr(session->child_pid));
+
+  VirtualMemory vm(session->child_pid);
+  vm.Update();
+  session->log(std::basic_stringstream<char>() << vm);
 }
 
 void session_regs(session_t* session, std::string arg) {

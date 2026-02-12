@@ -18,9 +18,19 @@ quit
 
 ### To-do
 
-- [ ] handle dynamic terminal resize
+- [ ] handle newlines in log line
+- [ ] for each mapped page in maps file, check if ELF header is present.
+      if present, find all code segments and disassemble all instructions.
+      store formatted disassembly in memory.
 - [ ] show disassembly in a window
+- [ ] handle dynamic terminal resize
 - [ ] support non-wrapping text overflow for windows
+- [ ] think about how to differentiate vertical vs horizontal scrolling
+- [ ] implement mouse event handling
+- [ ] implement mouse scrolling
+- [ ] target embedded linux
+- [ ] target OpenBSD
+- [x] find the virtual address of the page where the executable file is mapped
 - [x] implement text wrapping utility for wrapping text in a window
 - [x] poc render text in boxes
 - [x] write command history to a scrollback buffer
