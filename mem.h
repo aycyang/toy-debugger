@@ -5,8 +5,6 @@
 #include <cstdint>
 #include <unistd.h>
 
-uintptr_t getExecutableMappedPageBasePtr(pid_t pid);
-
 enum class Perms : uint8_t {
   Invalid = 0,
   Read = 1 << 0,
@@ -48,8 +46,10 @@ constexpr std::string permsToString(const Perms& perms) {
   return s;
 }
 
-struct Region {
+class Region {
+ public:
   Region(uintptr_t start, uintptr_t end, Perms perms) : start(start), end(end), perms(perms) {}
+  bool Contains(uintptr_t addr) const { return start <= addr && addr <= end; }
   uintptr_t start;
   uintptr_t end;
   Perms perms;
@@ -59,6 +59,7 @@ class VirtualMemory {
  public:
   VirtualMemory(pid_t pid);
   void Update();
+  Region GetRegionOf(uintptr_t addr) const;
   std::vector<Region> regions;
  private:
   pid_t pid;
@@ -70,4 +71,8 @@ constexpr std::stringstream&& operator<<(std::stringstream&& ss, const VirtualMe
     ss << std::dec << permsToString(region.perms) << std::endl;
   }
   return std::move(ss);
+}
+
+constexpr bool operator==(Region& l, Region& r) {
+  return l.start == r.start && l.end == r.end && l.perms == r.perms;
 }

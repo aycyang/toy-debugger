@@ -18,6 +18,7 @@ quit
 
 ### To-do
 
+- [ ] get memory region containing address
 - [ ] for each mapped page in maps file, check if ELF header is present.
       if present, find all code segments and disassemble all instructions.
       store formatted disassembly in memory.

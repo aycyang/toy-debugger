@@ -5,24 +5,9 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 
 #include <unistd.h> // pid_t
-
-// TODO adapt this code to find all mapped pages with ELFs
-// TODO write a function that takes a mapped ELF and 
-uintptr_t getExecutableMappedPageBasePtr(pid_t pid) {
-  std::ifstream maps_file;
-  std::basic_stringstream<char> maps_file_path;
-  maps_file_path << "/proc/" << pid << "/maps";
-  maps_file.open(maps_file_path.str());
-  
-  // TODO Naive assumption: the first hex number in the maps file is the base
-  // address of the page where the executable is mapped.
-  uintptr_t base_ptr;
-  maps_file >> std::hex >> base_ptr;
-
-  return base_ptr;
-}
 
 Perms permsFromString(std::string s) {
   Perms perms = Perms::Invalid;
@@ -68,4 +53,13 @@ void VirtualMemory::Update() {
   while (getline(maps_file, line)) {
     regions.emplace_back(parseProcPidMapsLine(line));
   }
+}
+
+Region VirtualMemory::GetRegionOf(uintptr_t addr) const {
+  auto it = std::find_if(regions.begin(), regions.end(),
+    [&addr](const Region& region) {
+      return region.Contains(addr);
+    }
+  );
+  return *it;
 }

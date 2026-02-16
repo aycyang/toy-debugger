@@ -6,6 +6,7 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include <memory>
 
 #include <elf.h>
 #include <assert.h>
@@ -30,6 +31,7 @@
 
 #include "util.h"
 #include "mem.h"
+#include "disasm.h"
 
 #define MAX_LINE_SIZE (256)
 #define UNUSED(x) (void)(x)
@@ -50,6 +52,7 @@ typedef struct {
   void log(std::string s) {
     output_lines.push_back(s);
   }
+  void UpdateDisasm();
   char** argv = 0;
   pid_t child_pid = 0;
   bool is_running = 0;
@@ -59,9 +62,19 @@ typedef struct {
   // This is set to the breakpoint at which the tracee is stopped.
   // If the tracee is not stopped at any breakpoint, this is NULL.
   breakpoint_t* current_breakpoint = 0;
+  std::unique_ptr<VirtualMemory> vm;
+  std::unique_ptr<DisasmCache> disasm_cache;
+  std::vector<std::string> disasm;
   ZydisDecoder zydis_decoder;
   ZydisFormatter zydis_formatter;
 } session_t;
+
+void session_t::UpdateDisasm() {
+  struct user_regs_struct regs;
+  assert(ptrace(PTRACE_GETREGS, child_pid, NULL, &regs) != -1);
+  uintptr_t rip = regs.rip;
+  log(std::basic_stringstream<char>() << "rip=" << std::hex << rip);
+}
 
 void debug_wait_status(session_t* session, int wait_status) {
   if (WIFEXITED(wait_status)) {
@@ -261,11 +274,12 @@ void session_run(session_t* session, std::string arg) {
   session->child_pid = child_pid;
 
   // tmp
-  session->log(std::basic_stringstream<char>() << "### 0x" << std::hex << getExecutableMappedPageBasePtr(session->child_pid));
+  session->vm = std::make_unique<VirtualMemory>(session->child_pid);
+  session->vm->Update();
 
-  VirtualMemory vm(session->child_pid);
-  vm.Update();
-  session->log(std::basic_stringstream<char>() << vm);
+  session->disasm_cache = std::make_unique<DisasmCache>(session->vm.get());
+
+  session->UpdateDisasm();
 }
 
 void session_regs(session_t* session, std::string arg) {
@@ -413,6 +427,7 @@ int main(int argc, char** argv) {
   keypad(stdscr, TRUE);
 
   auto* win = newwin(30, 80, 3, 8);
+  auto* win2 = newwin(30, 50, 3, 88);
 
   int ch;
   int height = getmaxy(stdscr);
@@ -479,6 +494,18 @@ int main(int argc, char** argv) {
       }
 
       wrefresh(win);
+    }
+
+    {
+      wclear(win2);
+      wborder(win2, 0, 0, 0, 0, 0, 0, 0, 0);
+
+      const int width = 50;
+      for (size_t i = 0; i < session.disasm.size(); i++) {
+        mvwprintw(win2, 1 + i, 1, "%.*s", width - 2, session.disasm[i].c_str());
+      }
+
+      wrefresh(win2);
     }
 
   }
