@@ -373,27 +373,8 @@ bool tokenize2(char* in, char** out1, char** out2) {
   return *out1 != NULL && *out2 != NULL;
 }
 
-std::vector<std::string> split(std::string str, char separator = ' ') {
-  std::vector<std::string> result;
-  std::string cur;
-  for (const char c : str) {
-    if (c == separator) {
-      if (!cur.empty()) {
-        result.push_back(std::move(cur));
-        cur.clear();
-      }
-      continue;
-    }
-    cur += c;
-  }
-  if (!cur.empty()) {
-    result.push_back(std::move(cur));
-  }
-  return result;
-}
-
 void dispatchCmd(session_t* session, std::string line) {
-  std::vector<std::string> tokens = split(line);
+  std::vector<std::string> tokens = split(line, " ");
   if (tokens.empty()) {
     return;
   }
@@ -431,7 +412,7 @@ int main(int argc, char** argv) {
   intrflush(stdscr, FALSE);
   keypad(stdscr, TRUE);
 
-  auto* win = newwin(10, 80, 3, 8);
+  auto* win = newwin(30, 80, 3, 8);
 
   int ch;
   int height = getmaxy(stdscr);
@@ -480,7 +461,7 @@ int main(int argc, char** argv) {
       wclear(win);
       wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
 
-      const size_t height = 10;
+      const size_t height = 30;
       const size_t width = 80;
       std::vector<std::string> visible_lines;
       for (auto it = session.output_lines.rbegin(); it != session.output_lines.rend(); it++) {

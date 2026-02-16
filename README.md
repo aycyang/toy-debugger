@@ -18,7 +18,6 @@ quit
 
 ### To-do
 
-- [ ] handle newlines in log line
 - [ ] for each mapped page in maps file, check if ELF header is present.
       if present, find all code segments and disassemble all instructions.
       store formatted disassembly in memory.
@@ -30,6 +29,7 @@ quit
 - [ ] implement mouse scrolling
 - [ ] target embedded linux
 - [ ] target OpenBSD
+- [x] handle newlines in log line
 - [x] find the virtual address of the page where the executable file is mapped
 - [x] implement text wrapping utility for wrapping text in a window
 - [x] poc render text in boxes

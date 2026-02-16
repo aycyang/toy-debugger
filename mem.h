@@ -67,7 +67,7 @@ class VirtualMemory {
 constexpr std::stringstream&& operator<<(std::stringstream&& ss, const VirtualMemory& vm) {
   for (const Region& region : vm.regions) {
     ss << std::hex << region.start << " - " << region.end << " ";
-    ss << std::dec << permsToString(region.perms) << ", ";
+    ss << std::dec << permsToString(region.perms) << std::endl;
   }
   return std::move(ss);
 }
