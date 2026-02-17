@@ -148,6 +148,7 @@ void session_step(session_t* session, std::string arg) {
     session_breakpoint_reactivate(session);
     session->current_breakpoint = NULL;
   }
+  session->UpdateDisasm();
 }
 
 void session_disasm(session_t* session, long long unsigned int addr) {

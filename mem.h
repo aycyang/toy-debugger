@@ -77,3 +77,7 @@ constexpr std::stringstream&& operator<<(std::stringstream&& ss, const VirtualMe
 constexpr bool operator==(Region& l, Region& r) {
   return l.start == r.start && l.end == r.end && l.perms == r.perms;
 }
+
+constexpr bool operator<(const Region& l, const Region& r) {
+  return l.start < r.start;
+}

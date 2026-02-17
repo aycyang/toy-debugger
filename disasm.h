@@ -14,9 +14,10 @@ class DisasmCache {
   DisasmCache(const VirtualMemory* vm);
   std::vector<std::string> GetDisasmAround(uintptr_t addr, int padding);
  private:
-  std::vector<std::string> DisassembleRegion(const Region& region);
+  std::map<uintptr_t, std::string> DisassembleRegion(const Region& region);
+  std::string FormatInstruction(std::string prefix, uintptr_t addr, std::string disasm);
   const VirtualMemory* vm;
-  std::vector<std::tuple<Region, std::vector<std::string>>> cache;
+  std::map<Region, std::map<uintptr_t, std::string>> cache;
   ZydisDecoder zydis_decoder;
   ZydisFormatter zydis_formatter;
 };

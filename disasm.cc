@@ -1,5 +1,6 @@
 #include "disasm.h"
 
+#include <format>
 #include <map>
 #include <array>
 #include <vector>
@@ -11,6 +12,16 @@
 
 #include "mem.h"
 
+namespace {
+std::string formatInstruction(std::string prefix, uintptr_t addr, std::string disasm) {
+  std::basic_stringstream<char> ss;
+  ss << prefix;
+  ss << std::format("0x{:x}", addr) << "  ";
+  ss << disasm;
+  return ss.str();
+}
+}  // namespace
+
 DisasmCache::DisasmCache(const VirtualMemory* vm) : vm(vm) {
   ZydisDecoderInit(&zydis_decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
   ZydisFormatterInit(&zydis_formatter, ZYDIS_FORMATTER_STYLE_ATT);
@@ -19,46 +30,55 @@ DisasmCache::DisasmCache(const VirtualMemory* vm) : vm(vm) {
 std::vector<std::string> DisasmCache::GetDisasmAround(uintptr_t addr, int padding) {
   std::vector<std::string> result;
   Region region = vm->GetRegionOf(addr);
-  auto it = std::find_if(cache.begin(), cache.end(), [&region](std::tuple<Region, std::vector<std::string>> t) {
-    return std::get<0>(t) == region;
-  });
-  if (it != cache.end()) {
-    std::vector<std::string>& disasm = std::get<1>(*it);
-    // TODO find instruction corresponding to instruction pointer
-    return disasm;
+  auto& disasm = cache[region];
+  if (disasm.empty()) {
+    disasm = DisassembleRegion(region);
   }
-  std::vector<std::string> disasm = DisassembleRegion(region);
-  cache.push_back(std::make_tuple(region, disasm));
-  // TODO find instruction corresponding to instruction pointer
-  return disasm;
-}
-
-std::vector<std::string> DisasmCache::DisassembleRegion(const Region& region) {
-  std::vector<std::string> result;
-  std::vector<std::tuple<ZydisDecodedInstruction, std::array<ZydisDecodedOperand,10>>> instructions;
-  uintptr_t addr = region.start;
-  std::array<uint64_t, 2> words;
-  words[0] = vm->Read(addr);
-  words[1] = vm->Read(addr + 8);
-  int i = 0;
-  while (addr <= region.end) {
-    ZydisDecodedInstruction instruction;
-    std::array<ZydisDecodedOperand, 10> operands;
-    if (!ZYAN_SUCCESS(ZydisDecoderDecodeFull(&zydis_decoder,
-      words.data(), 16, &instruction, operands.data()))) {
-      break;
-    }
-    instructions.push_back(make_tuple(instruction, operands));
-
-    addr += instruction.length;
-    words[0] = vm->Read(addr);
-    words[1] = vm->Read(addr + 8);
-    i++;
+  auto it = disasm.find(addr);
+  int b = 0;
+  for (b = 0; b < padding; b++) {
+    if (it == disasm.begin()) break;
+    it--;
   }
-  for (const auto& [instr, operands] : instructions) {
-    char buffer[256];
-    ZydisFormatterFormatInstruction(&zydis_formatter, &instr, operands.data(), ZYDIS_MAX_OPERAND_COUNT_VISIBLE, buffer, sizeof(buffer), addr, ZYAN_NULL);
-    result.push_back(std::string(buffer));
+  for (int i = 0; i < b; i++) {
+    result.push_back(formatInstruction("  ", it->first, it->second));
+    it++;
+  }
+  result.push_back(formatInstruction("> ", it->first, it->second));
+  it++;
+  for (int i = 0; i < padding; i++) {
+    if (it == disasm.end()) break;
+    result.push_back(formatInstruction("  ", it->first, it->second));
+    it++;
   }
   return result;
+}
+
+std::map<uintptr_t, std::string> DisasmCache::DisassembleRegion(const Region& region) {
+  std::vector<std::string> result;
+  std::vector<std::tuple<ZydisDecodedInstruction, std::array<ZydisDecodedOperand,10>>> instructions;
+  std::map<uintptr_t, std::string> formatted_disasm;
+  // The longest possible x86 instruction is 15 bytes.
+  // Two 64-bit unsigned integers should cover it.
+  std::array<uint64_t, 2> words;
+  uintptr_t addr = region.start;
+  while (addr <= region.end) {
+    words[0] = vm->Read(addr);
+    words[1] = vm->Read(addr + 8);
+
+    ZydisDecodedInstruction instruction;
+    std::array<ZydisDecodedOperand, 10> operands;
+    if (!ZYAN_SUCCESS(ZydisDecoderDecodeFull(&zydis_decoder, words.data(), 16,
+      &instruction, operands.data()))) {
+      break;
+    }
+
+    char buffer[256];
+    ZydisFormatterFormatInstruction(&zydis_formatter, &instruction, operands.data(),
+      ZYDIS_MAX_OPERAND_COUNT_VISIBLE, buffer, sizeof(buffer), addr, ZYAN_NULL);
+    formatted_disasm[addr] = buffer;
+
+    addr += instruction.length;
+  }
+  return formatted_disasm;
 }
