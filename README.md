@@ -18,11 +18,8 @@ quit
 
 ### To-do
 
-- [ ] get memory region containing address
-- [ ] for each mapped page in maps file, check if ELF header is present.
-      if present, find all code segments and disassemble all instructions.
-      store formatted disassembly in memory.
-- [ ] show disassembly in a window
+- [ ] fix bug: step on ret causes crash
+- [ ] make it possible to log to curses console from anywhere
 - [ ] handle dynamic terminal resize
 - [ ] support non-wrapping text overflow for windows
 - [ ] think about how to differentiate vertical vs horizontal scrolling
@@ -30,6 +27,8 @@ quit
 - [ ] implement mouse scrolling
 - [ ] target embedded linux
 - [ ] target OpenBSD
+- [x] get memory region containing address
+- [x] show disassembly in a window
 - [x] handle newlines in log line
 - [x] find the virtual address of the page where the executable file is mapped
 - [x] implement text wrapping utility for wrapping text in a window
