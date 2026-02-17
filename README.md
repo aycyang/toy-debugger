@@ -1,5 +1,7 @@
 # (WIP) Toy Debugger
 
+<img width="2032" height="1167" alt="Screenshot 2026-02-16 at 8 28 43 PM" src="https://github.com/user-attachments/assets/dedc8cda-5fd5-4e10-a049-2c538205b480" />
+
 ### Quick start
 
 ```
