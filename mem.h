@@ -60,6 +60,7 @@ class VirtualMemory {
   VirtualMemory(pid_t pid);
   void Update();
   Region GetRegionOf(uintptr_t addr) const;
+  uint64_t Read(uintptr_t addr) const;
   std::vector<Region> regions;
  private:
   pid_t pid;

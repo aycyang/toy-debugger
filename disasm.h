@@ -5,6 +5,8 @@
 #include <string>
 #include <cstdint>
 
+#include <Zydis/Zydis.h>
+
 #include "mem.h"
 
 class DisasmCache {
@@ -15,4 +17,6 @@ class DisasmCache {
   std::vector<std::string> DisassembleRegion(const Region& region);
   const VirtualMemory* vm;
   std::vector<std::tuple<Region, std::vector<std::string>>> cache;
+  ZydisDecoder zydis_decoder;
+  ZydisFormatter zydis_formatter;
 };

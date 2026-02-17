@@ -7,6 +7,7 @@
 #include <sstream>
 #include <algorithm>
 
+#include <sys/ptrace.h>
 #include <unistd.h> // pid_t
 
 Perms permsFromString(std::string s) {
@@ -53,6 +54,11 @@ void VirtualMemory::Update() {
   while (getline(maps_file, line)) {
     regions.emplace_back(parseProcPidMapsLine(line));
   }
+}
+
+uint64_t VirtualMemory::Read(uintptr_t addr) const {
+  uint64_t word = ptrace(PTRACE_PEEKDATA, pid, addr, NULL);
+  return word;
 }
 
 Region VirtualMemory::GetRegionOf(uintptr_t addr) const {

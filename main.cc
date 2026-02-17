@@ -74,6 +74,7 @@ void session_t::UpdateDisasm() {
   assert(ptrace(PTRACE_GETREGS, child_pid, NULL, &regs) != -1);
   uintptr_t rip = regs.rip;
   log(std::basic_stringstream<char>() << "rip=" << std::hex << rip);
+  disasm = disasm_cache->GetDisasmAround(rip, 10);
 }
 
 void debug_wait_status(session_t* session, int wait_status) {
@@ -188,6 +189,7 @@ void session_continue(session_t* session, std::string arg) {
         session_breakpoint_deactivate(session);
         session_set_ip(session, ip - 1);
         session_disasm(session, ip - 1);
+        session->UpdateDisasm();
       } break;
       case SIGTERM:
         session->is_running = false;
@@ -276,6 +278,8 @@ void session_run(session_t* session, std::string arg) {
   // tmp
   session->vm = std::make_unique<VirtualMemory>(session->child_pid);
   session->vm->Update();
+
+  session->log(std::basic_stringstream<char>() << *session->vm);
 
   session->disasm_cache = std::make_unique<DisasmCache>(session->vm.get());
 
