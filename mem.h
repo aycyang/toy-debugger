@@ -66,14 +66,6 @@ class VirtualMemory {
   pid_t pid;
 };
 
-constexpr std::stringstream&& operator<<(std::stringstream&& ss, const VirtualMemory& vm) {
-  for (const Region& region : vm.regions) {
-    ss << std::hex << region.start << " - " << region.end << " ";
-    ss << std::dec << permsToString(region.perms) << std::endl;
-  }
-  return std::move(ss);
-}
-
 constexpr bool operator==(Region& l, Region& r) {
   return l.start == r.start && l.end == r.end && l.perms == r.perms;
 }

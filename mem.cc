@@ -10,6 +10,8 @@
 #include <sys/ptrace.h>
 #include <unistd.h> // pid_t
 
+#include "log.h"
+
 Perms permsFromString(std::string s) {
   Perms perms = Perms::Invalid;
   if (s[0] == 'r') {
@@ -53,6 +55,12 @@ void VirtualMemory::Update() {
   std::string line;
   while (getline(maps_file, line)) {
     regions.emplace_back(parseProcPidMapsLine(line));
+  }
+
+  DLOG() << "VirtualMemory::Update";
+  for (const Region& region : regions) {
+    DLOG() << "  " << std::hex << region.start << " - " << region.end << " "
+           << std::dec << permsToString(region.perms);
   }
 }
 

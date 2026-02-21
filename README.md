@@ -21,7 +21,6 @@ quit
 ### To-do
 
 - [ ] fix bug: step on ret causes crash
-- [ ] make it possible to log to curses console from anywhere
 - [ ] handle dynamic terminal resize
 - [ ] support non-wrapping text overflow for windows
 - [ ] think about how to differentiate vertical vs horizontal scrolling
@@ -29,6 +28,7 @@ quit
 - [ ] implement mouse scrolling
 - [ ] target embedded linux
 - [ ] target OpenBSD
+- [x] make it possible to log to file from anywhere
 - [x] get memory region containing address
 - [x] show disassembly in a window
 - [x] handle newlines in log line

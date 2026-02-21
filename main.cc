@@ -32,6 +32,7 @@
 #include "util.h"
 #include "mem.h"
 #include "disasm.h"
+#include "log.h"
 
 #define MAX_LINE_SIZE (256)
 #define UNUSED(x) (void)(x)
@@ -48,9 +49,11 @@ breakpoint_t* breakpoints = NULL;
 typedef struct {
   void log(std::basic_stringstream<char> ss) {
     output_lines.push_back(ss.str());
+    LOG() << ss.str();
   }
   void log(std::string s) {
     output_lines.push_back(s);
+    LOG() << s;
   }
   void UpdateDisasm();
   char** argv = 0;
@@ -218,6 +221,7 @@ void session_quit(session_t* session, std::string arg) {
   }
   endwin();
   printf("Bye!\n");
+  LOG() << "Bye!";
   exit(0);
 }
 
@@ -279,8 +283,6 @@ void session_run(session_t* session, std::string arg) {
   // tmp
   session->vm = std::make_unique<VirtualMemory>(session->child_pid);
   session->vm->Update();
-
-  session->log(std::basic_stringstream<char>() << *session->vm);
 
   session->disasm_cache = std::make_unique<DisasmCache>(session->vm.get());
 
