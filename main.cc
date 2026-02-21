@@ -431,8 +431,8 @@ int main(int argc, char** argv) {
   intrflush(stdscr, FALSE);
   keypad(stdscr, TRUE);
 
-  auto* win = newwin(30, 80, 3, 8);
-  auto* win2 = newwin(30, 50, 3, 88);
+  auto* win = newwin(20, 60, 0, 0);
+  auto* win2 = newwin(20, 60, 0, 60);
 
   int ch;
   int height = getmaxy(stdscr);
@@ -481,8 +481,8 @@ int main(int argc, char** argv) {
       wclear(win);
       wborder(win, 0, 0, 0, 0, 0, 0, 0, 0);
 
-      const size_t height = 30;
-      const size_t width = 80;
+      const size_t height = 20;
+      const size_t width = 60;
       std::vector<std::string> visible_lines;
       for (auto it = session.output_lines.rbegin(); it != session.output_lines.rend(); it++) {
         std::vector<std::string> wrapped_lines = wrapTo(*it, width - 2);
@@ -505,7 +505,7 @@ int main(int argc, char** argv) {
       wclear(win2);
       wborder(win2, 0, 0, 0, 0, 0, 0, 0, 0);
 
-      const int width = 50;
+      const int width = 60;
       for (size_t i = 0; i < session.disasm.size(); i++) {
         mvwprintw(win2, 1 + i, 1, "%.*s", width - 2, session.disasm[i].c_str());
       }
